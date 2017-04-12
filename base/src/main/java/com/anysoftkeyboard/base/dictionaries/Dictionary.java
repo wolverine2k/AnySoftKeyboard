@@ -21,8 +21,6 @@ package com.anysoftkeyboard.base.dictionaries;
  * strokes.
  */
 abstract public class Dictionary {
-    private static final String TAG = "ASK_DICT";
-
     public static final int MAX_WORD_LENGTH = 32;
     public static final int MAX_WORD_FREQUENCY = 255;
 
@@ -44,7 +42,7 @@ abstract public class Dictionary {
     /**
      * Interface to be implemented by classes requesting words to be fetched from the dictionary.
      *
-     * @see #getWords(WordComposer, WordCallback)
+     * @see #getWords(KeyCodesProvider, WordCallback)
      */
     public interface WordCallback {
         /**
@@ -82,7 +80,7 @@ abstract public class Dictionary {
      * @param callback the callback object to send matched words to as possible candidates
      * @see WordCallback#addWord(char[], int, int, int, Dictionary)
      */
-    abstract public void getWords(final WordComposer composer, final WordCallback callback);
+    public abstract void getWords(final KeyCodesProvider composer, final WordCallback callback);
 
     /**
      * Checks if the given word occurs in the dictionary

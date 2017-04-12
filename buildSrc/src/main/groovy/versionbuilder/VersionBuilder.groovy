@@ -1,15 +1,51 @@
 package versionbuilder
 
-class VersionBuilder {
-    static final int GIT_COMMIT_COUNT_NORMALIZE = 2320;
-    static final int GIT_COMMIT_COUNT_MINOR_NORMALIZE = 140+50+38;
+import org.gradle.api.plugins.ExtensionContainer
 
-    static def buildGitVersionNumber() {
-        return Integer.parseInt('git rev-list --count HEAD'.execute().text.trim()) - GIT_COMMIT_COUNT_NORMALIZE;
+public abstract class VersionBuilder {
+
+    public static VersionBuilder getVersionBuilder(int major, int minor, ExtensionContainer exts) {
+        if (ShippableVersionBuilder.isShippableEnvironment()) {
+            println("Using ShippableVersionBuilder for versioning.")
+            return new ShippableVersionBuilder(major, minor, exts)
+        } else if (CircleCIVersionBuilder.isCircleCiEnvironment()) {
+            println("Using CircleCIVersionBuilder for versioning.")
+            return new CircleCIVersionBuilder(major, minor, exts)
+        } else if (GitVersionBuilder.isGitEnvironment()) {
+            println("Using GitVersionBuilder for versioning.")
+            return new GitVersionBuilder(major, minor, exts)
+        } else {
+            println("Using fallback StaticVersionBuilder for versioning.")
+            return new StaticVersionBuilder(major, minor, exts)
+        }
     }
 
-    static def buildGitVersionName() {
-        return String.format("%d.%d.%d", 1, 6, buildGitVersionNumber() - GIT_COMMIT_COUNT_MINOR_NORMALIZE);
+    protected final int major
+    protected final int minor
+    protected final int minorBuildOffset
+
+    protected VersionBuilder(int major, int minor, ExtensionContainer exts) {
+        this.minor = minor
+        this.major = major
+        this.minorBuildOffset = getValueFromExts(exts, "versionBuildMinorOffset", 0)
     }
 
+    protected static int getValueFromExts(ExtensionContainer ext, String key, int defaultValue) {
+        Object value = ext.findByName(key)
+        return value == null? defaultValue : Integer.parseInt(value.toString())
+    }
+
+    public final int getVersionCode() {
+        return getBuildCount();
+    }
+
+    protected abstract int getBuildCount()
+
+    private int getBuildVersionNumber() {
+        return getBuildCount() - minorBuildOffset
+    }
+
+    public final String getVersionName() {
+        return String.format("%d.%d.%d", major, minor, getBuildVersionNumber())
+    }
 }

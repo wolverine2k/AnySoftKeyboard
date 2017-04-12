@@ -1,193 +1,104 @@
-import com.android.build.OutputFile;
-import localproperties.LocalPropertiesFile;
+import emoji.EmojiCollector
+import emoji.EmojiKeyboardsExtractor
+
+ext.androidBuildTools = '25.0.2'
+ext.supportLibVersion = '24.1.1'
+ext.AnySoftKeyboardApiVersion = '1.9.0'
+
+ext.sdkTargetVersion = 25
+ext.sdkCompileVersion = 25
+ext.sdkMinimumVersion = 7
 
 buildscript {
     repositories {
         mavenLocal()
+        jcenter()
         mavenCentral()
-        maven {
-            url 'https://oss.sonatype.org/content/repositories/snapshots/'
-        }
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+        maven { url 'https://jitpack.io' }
+        maven { url "https://plugins.gradle.org/m2/" }
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:1.3.0'
-        classpath 'com.jakewharton.sdkmanager:gradle-plugin:0.12.0'
+        classpath 'com.android.tools.build:gradle:2.3.0'
+        classpath "net.ltgt.gradle:gradle-errorprone-plugin:0.0.9"
+        classpath 'com.github.Triple-T:gradle-play-publisher:cb6f3adf031588f43ed77ec658a2f1c6dd83ffbf'
+        classpath 'com.github.AnySoftKeyboard.AnySoftKeyboardTools:makedictionary:99bd3e6'
+        classpath 'com.github.AnySoftKeyboard.AnySoftKeyboardTools:generatewordslist:99bd3e6'
+        classpath 'org.jsoup:jsoup:1.9.1'
+        classpath 'com.github.gfx.ribbonizer:plugin:0.6.0'
     }
 }
 
-apply plugin: 'android-sdk-manager'
-apply plugin: 'com.android.application'
+apply plugin: "net.ltgt.errorprone"
 apply plugin: 'pmd'
-apply plugin: 'jacoco'
 
-version versionbuilder.VersionBuilder.buildGitVersionName()
-group 'net.evendanan'
-
-println "Building AnySoftKeyboard "+version
-
-def localExtraProperties = new LocalPropertiesFile(new File(projectDir, 'local.extra.properties'))
-def localSigningProperties = new LocalPropertiesFile(new File(projectDir, 'local.signing.properties'))
-
-//support for density split
-ext.versionCodes = [all:0, ldpi:1, mdpi:2, hdpi:3, xhdpi:4]
-android.applicationVariants.all { variant ->
-    // assign different version code for each output
-    variant.outputs.each { output ->
-        def key = output.getFilter(OutputFile.DENSITY) == null ? "all" : output.getFilter(OutputFile.DENSITY)
-        output.versionCodeOverride = project.ext.versionCodes.get(key) + android.defaultConfig.versionCode
-        output.versionNameOverride = android.defaultConfig.versionName+"-"+key
-        def fileName = output.outputFile.name.replace(".apk", "-" + output.versionNameOverride + ".apk")
-        output.outputFile = new File(output.outputFile.parent, fileName)
-    }
+configurations.errorprone {
+    resolutionStrategy.force 'com.google.errorprone:error_prone_core:2.0.18'
 }
 
-android {
-    packagingOptions {
-        exclude 'LICENSE.txt'
-        exclude 'META-INF/LICENSE'
-        exclude 'META-INF/LICENSE.txt'
-        exclude 'META-INF/NOTICE'
-    }
-
-    compileSdkVersion 23
-    buildToolsVersion "23.0.1"
-
-    defaultConfig {
-        applicationId 'com.menny.android.anysoftkeyboard'
-        versionCode versionbuilder.VersionBuilder.buildGitVersionNumber()
-        versionName project.version
-
-        minSdkVersion 7
-        targetSdkVersion 23
-        //adding additional fields to the BuildConfig class.
-
-        //extra details - from local
-        def String support_email_address = localExtraProperties.getValueWithConsoleFallback('CRASH_REPORT_EMAIL', 'ooops@example.com', 'Support email address')
-        println 'crash report email is: '+support_email_address
-
-        buildConfigField "String", "CRASH_REPORT_EMAIL_ADDRESS", '"'+support_email_address+'"'
-
-        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_7
-        targetCompatibility JavaVersion.VERSION_1_7
-    }
-
-    signingConfigs {
-        release {
-            def String keystore_file = localSigningProperties.getValueWithConsoleFallback('STORE_FILE', 'Key-Store file name')
-            def String keystore_password = localSigningProperties.getValueWithConsoleFallback('STORE_PASSWORD', 'Key-Store file password')
-            def String key_alias = localSigningProperties.getValueWithConsoleFallback('KEY_ALIAS', 'App key alias')
-            def String key_alias_password = localSigningProperties.getValueWithConsoleFallback('KEY_PASSWORD', 'App key password')
-
-            if (    utils.Utils.isEmpty(keystore_file) || utils.Utils.isEmpty(keystore_password) ||
-                    utils.Utils.isEmpty(key_alias) || utils.Utils.isEmpty(key_alias_password)) {
-                //missing signing details, so I'll use debug signingConfigs details.
-                println "Missing release build-type signing details, I'll use DEBUG signing for the release."
-                storeFile signingConfigs.debug.storeFile
-                storePassword signingConfigs.debug.storePassword
-                keyAlias signingConfigs.debug.keyAlias
-                keyPassword signingConfigs.debug.keyPassword
-            } else {
-                println 'For signing, will use key-store file '+keystore_file+', with key '+key_alias
-                storeFile file(keystore_file)
-                storePassword keystore_password
-                keyAlias key_alias
-                keyPassword key_alias_password
-            }
-        }
-    }
-
-    buildTypes {
-        release {
-            signingConfig signingConfigs.release
-            zipAlignEnabled true
-
-            minifyEnabled true
-            proguardFiles 'proguard-android-optimize.txt', 'proguard-rules.txt'
-        }
-
-        debug {
-            signingConfig signingConfigs.release
-            zipAlignEnabled true
-            debuggable true
-            testCoverageEnabled false
-        }
-    }
-    jacoco {
-        version "0.7.1.201405082137"
-    }
-    splits {
-        density {
-            enable false
-            //these will merged into the universal APK
-            //I'm trying to really reduce the size of the low densities.
-            exclude "tvdpi", "xxhdpi", "xxxhdpi"
-        }
-    }
-}
-
-jacoco {
-    toolVersion "0.7.1.201405082137"
-}
-
-// Define coverage source.
-// If you have rs/aidl etc... add them here.
-def coverageSourceDirs = [
-        'src/main/java',
-]
-
-task jacocoTestReport(type: JacocoReport, dependsOn: "check") {
-    group = "Reporting"
-    description = "Generate Jacoco coverage reports after running tests."
-    reports {
-        xml.enabled = true
-        html.enabled = true
-    }
-    classDirectories = fileTree(
-            dir: './build/intermediates/classes/debug',
-            excludes: ['**/R*.class',
-                       '**/*$InjectAdapter.class',
-                       '**/*$ModuleAdapter.class',
-                       '**/*$ViewInjector*.class'
-            ])
-    sourceDirectories = files(coverageSourceDirs)
-    executionData = files("$buildDir/jacoco/testDebug.exec")
-    // Bit hacky but fixes https://code.google.com/p/android/issues/detail?id=69174.
-    // We iterate through the compiled .class tree and rename $$ to $.
-    doFirst {
-        new File("$buildDir/intermediates/classes/").eachFileRecurse { file ->
-            if (file.name.contains('$$')) {
-                file.renameTo(file.path.replace('$$', '$'))
-            }
-        }
-    }
-}
-
-dependencies {
+allprojects {
     repositories {
+        jcenter()
         mavenCentral()
-        maven {
-            url 'https://oss.sonatype.org/content/repositories/snapshots/'
-        }
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
         maven { url "https://jitpack.io" }
     }
-    compile project(':base')
-    compile project(':nextword')
-    compile project(':jnidictionaryv1')
-    compile project(':jnidictionaryv2')
-
-    compile 'com.github.AnySoftKeyboard:AnySoftKeyboard-API:1.2.4'
-    compile 'com.github.menny:FrankenRobot:1.1.5'
-    compile 'com.android.support:appcompat-v7:23.0.1'
-    compile 'com.android.support:recyclerview-v7:23.0.1'
-    compile 'com.android.support:support-annotations:23.0.1'
-    compile fileTree(dir: 'libs', include: '*.jar')
-
-    testCompile 'junit:junit:4.12'
-    testCompile 'org.robolectric:robolectric:3.0'
-    testCompile 'org.mockito:mockito-core:1.9.5'
 }
 
+//this task is not used anymore, we use AOSP dictionary instead
+task parseInputFilesForEnglishDictionary(type: com.anysoftkeyboard.tools.generatewordslist.GenerateWordsListTask) {
+    inputFiles file(new File(project.getProjectDir(), "english_dictionary/inputs/")).listFiles()
+    outputWordsListFile new File(project.getProjectDir(), "english_dictionary/words_from_inputs.xml")
+}
+
+task parseAospForEnglishDictionary(type: com.anysoftkeyboard.tools.generatewordslist.GenerateWordsListFromAOSPTask) {
+    inputFile new File(project.getProjectDir(), "english_dictionary/aosp_en_wordlist.combined")
+    outputWordsListFile new File(project.getProjectDir(), "english_dictionary/words_from_aosp.xml")
+    maxWordsInList 300000
+}
+
+task mergeAllWordLists(type: com.anysoftkeyboard.tools.generatewordslist.MergeWordsListTask) {
+    dependsOn parseAospForEnglishDictionary
+
+    inputWordsListFiles = [
+            new File(project.getProjectDir(), "english_dictionary/words_from_aosp.xml"),
+            new File(project.getProjectDir(), "english_dictionary/words_from_legacy.xml")
+    ] as File[]
+    outputWordsListFile new File(project.getProjectDir(), "english_dictionary/words_merged.xml")
+    maxWordsInList 300000
+
+    wordsToDiscard = ['clubbing\'s', 'muggins\'s', 'olefin', 'cs\'s']
+}
+
+task makeEnglishDictionary(type: com.anysoftkeyboard.tools.makedictionary.MakeDictionaryTask) {
+    dependsOn mergeAllWordLists
+    inputWordsListFile new File(project.getProjectDir(), "english_dictionary/words_merged.xml")
+    resourcesFolder = new File(project.findProject("app").projectDir, "/src/main/res/")
+}
+
+task makeEmojiKeyboards {
+    doLast {
+        //http://unicode.org/emoji/charts/full-emoji-list.html
+        //http://unicode.org/emoji/charts-beta/full-emoji-list.html
+        EmojiKeyboardsExtractor extractor = new EmojiKeyboardsExtractor(
+                new File(projectDir, "/emojis/full_emoji_data.htm"),
+                new File(project.findProject("app").projectDir, "/src/main/res/xml-v24/"))
+        //adding known collectors
+        extractor.addEmojiCollector(EmojiCollector.EMOTICONS_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.FLAGS_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.PEOPLE_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.ACTIVITY_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.ACCESSORIES_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.SCAPE_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.FOOD_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.NATURE_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.OFFICE_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.SIGNS_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.OCCASIONS_COLLECTOR)
+        extractor.addEmojiCollector(EmojiCollector.TRANSPORT_COLLECTOR)
+
+        extractor.setUncollectedEmojisCollector(EmojiCollector.UNCOLLECTED_COLLECTOR)
+
+        extractor.parseEmojiListIntoKeyboardResources()
+    }
+}
